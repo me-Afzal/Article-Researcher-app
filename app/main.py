@@ -1,81 +1,395 @@
 import streamlit as st
 import pickle
 import os
+import re
+from urllib.parse import unquote
 from langchain.chains import RetrievalQAWithSourcesChain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import UnstructuredURLLoader
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_together import Together
+import html
 
-#Adding api key for LLM call
+# Page config
+st.set_page_config(
+    page_title="Articles Research Tool",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS for black and white theme
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: bold;
+        text-align: center;
+        color: #000;
+        margin-bottom: 2rem;
+        border-bottom: 2px solid #000;
+        padding-bottom: 1rem;
+    }
+
+    .sub-header {
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: #000;
+        margin: 1.5rem 0 1rem 0;
+        border-bottom: 1px solid #ddd;
+        padding-bottom: 0.5rem;
+    }
+
+    .answer-card {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+        position: relative;
+        font-size: 1.1rem;
+        line-height: 1.6;
+        color: #212529;
+    }
+
+    .copy-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 5px 10px;
+        cursor: pointer;
+        font-size: 0.8rem;
+        color: #666;
+    }
+
+    .copy-btn:hover {
+        background: #f8f9fa;
+        border-color: #999;
+    }
+
+    .stButton > button {
+        background: #000;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 0.5rem 1.5rem;
+        font-weight: 500;
+        width: 100%;
+        margin: 0.5rem 0;
+    }
+
+    .stButton > button:hover {
+        background: #333;
+    }
+
+    .sidebar .stButton > button {
+        width: 100%;
+        margin: 0.3rem 0;
+    }
+
+    .source-item {
+        background: #f8f9fa;
+        border-left: 3px solid #000;
+        padding: 0.5rem 1rem;
+        margin: 0.5rem 0;
+        border-radius: 0 4px 4px 0;
+        min-height: 40px;
+        display: flex;
+        align-items: center;
+    }
+
+    .source-item a {
+        color: #0066cc;
+        text-decoration: none;
+        word-break: break-all;
+    }
+
+    .source-item a:hover {
+        text-decoration: underline;
+    }
+
+    .progress-container {
+        margin: 1rem 0;
+    }
+
+    .status-text {
+        font-size: 0.9rem;
+        color: #666;
+        margin-bottom: 0.5rem;
+    }
+
+    .main-content {
+        background: white;
+        padding: 2rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin: 1rem 0;
+    }
+
+    .sidebar-section {
+        margin-bottom: 1.5rem;
+    }
+
+    .url-preview {
+        font-size: 0.8rem;
+        color: #666;
+        background: #f8f9fa;
+        padding: 0.3rem 0.5rem;
+        border-radius: 4px;
+        margin: 0.2rem 0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# JavaScript for copy functionality
+st.markdown("""
+<script>
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(function() {
+        const btn = event.target;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = 'Copied!';
+        setTimeout(() => {
+            btn.innerHTML = originalText;
+        }, 2000);
+    });
+}
+</script>
+""", unsafe_allow_html=True)
+
+# Function to clean HTML tags from text
+def clean_html_tags(text):
+    """Remove HTML tags and clean up text"""
+    if not text:
+        return text
+    
+    # Remove HTML tags
+    clean_text = re.sub(r'<[^>]+>', '', text)
+    
+    # Replace common HTML entities
+    clean_text = html.unescape(clean_text)
+    
+    # Remove extra whitespace and newlines
+    clean_text = re.sub(r'\s+', ' ', clean_text)
+    
+    # Remove any remaining HTML-like artifacts
+    clean_text = re.sub(r'&\w+;', '', clean_text)
+    
+    return clean_text.strip()
+
+# Function to clean and decode URLs
+def clean_and_decode_url(url):
+    """Clean and decode URL from HTML entities and URL encoding"""
+    if not url:
+        return url
+    
+    # First, unescape HTML entities
+    url = html.unescape(url)
+    
+    # Then, decode URL encoding
+    url = unquote(url)
+    
+    return url.strip()
+
+# Initialize session state
+if 'urls' not in st.session_state:
+    st.session_state.urls = ['']
+if 'vector_db_ready' not in st.session_state:
+    st.session_state.vector_db_ready = False
+if 'processing' not in st.session_state:
+    st.session_state.processing = False
+
+# Adding API key for LLM call
 os.environ["TOGETHER_API_KEY"] = st.secrets["together"]["api_key"]
 
-file_path="faiss_vector_db.pkl"
+file_path = "faiss_vector_db.pkl"
 
-llm=Together(
+# Initialize LLM
+llm = Together(
     model="mistralai/Mixtral-8x7B-Instruct-v0.1",
     temperature=0.6,
     max_tokens=512
 )
 
-st.title("Articles Research Tool 🤖")
+# Main header
+st.markdown('<h1 class="main-header">Articles Research Tool</h1>', unsafe_allow_html=True)
 
-st.sidebar.title("Artcle URLs")
+# Sidebar for URL management
+st.sidebar.markdown("## URL Management")
 
-urls=[]
+def add_url():
+    st.session_state.urls.append('')
 
-for i in range(3):
-    url=st.sidebar.text_input(f"Paste URL {i+1}")
-    if url.strip():  # only add if not empty
-        urls.append(url)
-   
-process_url_clicked=st.sidebar.button("Process URLs")
+def remove_url(index):
+    if len(st.session_state.urls) > 1:
+        st.session_state.urls.pop(index)
 
-main_placeholder=st.empty()
+st.sidebar.markdown("### Add Article URLs")
+for i, url in enumerate(st.session_state.urls):
+    col1, col2 = st.sidebar.columns([4, 1])
+    with col1:
+        st.session_state.urls[i] = st.text_input(
+            f"URL {i+1}",
+            value=url,
+            key=f"url_{i}",
+            placeholder="https://example.com/article",
+            label_visibility="collapsed"
+        )
+    with col2:
+        if len(st.session_state.urls) > 1:
+            if st.button("×", key=f"remove_{i}", help="Remove this URL"):
+                remove_url(i)
+                st.rerun()
 
-if process_url_clicked:
-    #load data
-    loader=UnstructuredURLLoader(urls=urls)
-    main_placeholder.text("Data Loading Started ...")
-    data=loader.load()
-    #split data
-    
-    splitter=RecursiveCharacterTextSplitter(
-        separators=["\n\n","\n","."],
-        chunk_size=600,
-        chunk_overlap=50
+col1, col2 = st.sidebar.columns(2)
+with col1:
+    if st.button("+ Add URL", key="add_url"):
+        add_url()
+        st.rerun()
+
+with col2:
+    if st.button("Clear All", key="clear_all"):
+        st.session_state.urls = ['']
+        st.rerun()
+
+valid_urls = [url.strip() for url in st.session_state.urls if url.strip()]
+
+if valid_urls:
+    st.sidebar.markdown("### Current URLs")
+    for i, url in enumerate(valid_urls, 1):
+        st.sidebar.markdown(f'<div class="url-preview">{i}. {url[:40]}{"..." if len(url) > 40 else ""}</div>', unsafe_allow_html=True)
+
+st.sidebar.markdown("---")
+process_clicked = st.sidebar.button("Process URLs", disabled=len(valid_urls) == 0)
+
+if process_clicked:
+    st.session_state.processing = True
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
+    try:
+        status_text.markdown('<div class="status-text">Loading data from URLs...</div>', unsafe_allow_html=True)
+        progress_bar.progress(20)
+        loader = UnstructuredURLLoader(urls=valid_urls)
+        data = loader.load()
+
+        if not data:
+            st.error("No data could be loaded from the provided URLs. Please check if the URLs are valid and accessible.")
+            st.stop()
+
+        status_text.markdown('<div class="status-text">Splitting text into chunks...</div>', unsafe_allow_html=True)
+        progress_bar.progress(40)
+
+        splitter = RecursiveCharacterTextSplitter(
+            separators=["\n\n", "\n", "."],
+            chunk_size=600,
+            chunk_overlap=50
+        )
+        docs = splitter.split_documents(data)
+
+        status_text.markdown('<div class="status-text">Creating embeddings and building vector database...</div>', unsafe_allow_html=True)
+        progress_bar.progress(70)
+
+        embedder = HuggingFaceEmbeddings(model_name="all-mpnet-base-v2")
+        vector_db = FAISS.from_documents(docs, embedding=embedder)
+
+        status_text.markdown('<div class="status-text">Saving vector database...</div>', unsafe_allow_html=True)
+        progress_bar.progress(90)
+
+        with open(file_path, "wb") as f:
+            pickle.dump(vector_db, f)
+
+        progress_bar.progress(100)
+        st.session_state.vector_db_ready = True
+        st.session_state.processing = False
+        st.success("Processing complete! You can now ask questions about the content.")
+
+    except Exception as e:
+        st.error(f"An error occurred during processing: {str(e)}")
+        st.session_state.processing = False
+
+if os.path.exists(file_path):
+    st.session_state.vector_db_ready = True
+
+if st.session_state.vector_db_ready:
+    st.markdown("---")
+    st.markdown('<h2 class="sub-header">Ask Questions</h2>', unsafe_allow_html=True)
+    query = st.text_area(
+        "Enter your question:",
+        placeholder="What is the main topic discussed in these articles?",
+        key="query_input",
+        height=100
     )
-    main_placeholder.text("Text Splitting Started ...")
-    docs=splitter.split_documents(data)
-    
-    #Create embeddings and save to FAISS index
-    
-    embedder = HuggingFaceEmbeddings(model_name="all-mpnet-base-v2")
-    main_placeholder.text("Embedding and Vector DB Started Building ...")
-    vector_db=FAISS.from_documents(docs,embedding=embedder)
-    
-    with open(file_path,"wb") as f:
-        pickle.dump(vector_db,f) 
-    
-query=main_placeholder.text_input("Question: ")
+    search_clicked = st.button("Send Query", key="search_button", type="primary")
 
-if query:
-    if os.path.exists(file_path):
-        with open(file_path,"rb") as f:
-            vector_db=pickle.load(f)
-        retriever = vector_db.as_retriever(search_kwargs={"k": 2})
-        chain=RetrievalQAWithSourcesChain.from_llm(llm=llm,retriever=retriever)
-        result=chain.invoke({'question':query})
-        # Result contains answer and source(metadata)
-        st.header("Answer for your question: ")
-        st.write(result["answer"])
-        
-        sources=result.get("sources", "")
-        if sources:
-            st.subheader("Sources: ")
-            source_list=sources.split("\n")
-            for source in source_list:
-                st.write(source)
-    
-      
+    if search_clicked and query:
+        with st.spinner("Searching for relevant information..."):
+            try:
+                with open(file_path, "rb") as f:
+                    vector_db = pickle.load(f)
+
+                retriever = vector_db.as_retriever(search_kwargs={"k": 3})
+                chain = RetrievalQAWithSourcesChain.from_llm(llm=llm, retriever=retriever)
+                result = chain.invoke({'question': query})
+
+                st.markdown("---")
+                st.markdown("### Answer")
+
+                # Clean the answer text from HTML tags
+                raw_answer = result["answer"]
+                cleaned_answer = clean_html_tags(raw_answer)
+                
+                # Escape for HTML display and make JS safe
+                escaped_answer_text = html.escape(cleaned_answer)
+                js_safe_text = escaped_answer_text.replace("`", "\\`").replace("'", "\\'")
+
+                answer_html = f"""
+                <div class="answer-card">
+                    <button class="copy-btn" onclick="copyToClipboard(`{js_safe_text}`)">Copy</button>
+                    {escaped_answer_text}
+                </div>
+                """
+                st.markdown(answer_html, unsafe_allow_html=True)
+
+                sources = result.get("sources", "")
+                if sources and sources.strip():
+                    st.markdown("### Sources")
+                    source_list = sources.split("\n")
+                    valid_sources = []
+                    
+                    for source in source_list:
+                        source = source.strip()
+                        if source and source != "N/A" and source != "":
+                            # Clean and decode the URL
+                            cleaned_source = clean_and_decode_url(source)
+                            valid_sources.append(cleaned_source)
+                    
+                    if valid_sources:
+                        for i, source in enumerate(valid_sources, 1):
+                            # Check if source is a URL
+                            if source.startswith(('http://', 'https://')):
+                                st.markdown(f'<div class="source-item">{i}. <a href="{source}" target="_blank">{source}</a></div>', unsafe_allow_html=True)
+                            else:
+                                # For non-URL sources, just display the text
+                                st.markdown(f'<div class="source-item">{i}. {source}</div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown('<div class="source-item">No specific sources were identified for this answer.</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<div class="source-item">No sources available for this answer.</div>', unsafe_allow_html=True)
+
+            except Exception as e:
+                st.error(f"An error occurred while processing your question: {str(e)}")
+
+    elif search_clicked and not query:
+        st.warning("Please enter a question before searching!")
+
+st.markdown("---")
+st.markdown("""
+<div style="text-align: center; color: #666; margin-top: 2rem; font-size: 0.9rem;">
+    Powered by LangChain, HuggingFace, and Together AI
+</div>
+""", unsafe_allow_html=True)
