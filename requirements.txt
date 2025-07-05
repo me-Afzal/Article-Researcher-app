@@ -7,3 +7,4 @@ sentence-transformers
 faiss-cpu
 unstructured[all-docs]
 tiktoken
+html5lib
