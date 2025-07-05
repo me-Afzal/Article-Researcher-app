@@ -14,7 +14,7 @@ import html
 # Page config
 st.set_page_config(
     page_title="Articles Research Tool",
-    page_icon="🤖",
+    page_icon="🔍",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -145,22 +145,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# JavaScript for copy functionality
-st.markdown("""
-<script>
-function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(function() {
-        const btn = event.target;
-        const originalText = btn.innerHTML;
-        btn.innerHTML = 'Copied!';
-        setTimeout(() => {
-            btn.innerHTML = originalText;
-        }, 2000);
-    });
-}
-</script>
-""", unsafe_allow_html=True)
-
 # Function to clean HTML tags from text
 def clean_html_tags(text):
     """Remove HTML tags and clean up text"""
@@ -192,6 +176,10 @@ def clean_and_decode_url(url):
     
     # Then, decode URL encoding
     url = unquote(url)
+    
+    # Remove trailing slash if it exists (except for root domains)
+    if url.endswith('/') and url.count('/') > 2:
+        url = url.rstrip('/')
     
     return url.strip()
 
@@ -343,17 +331,12 @@ if st.session_state.vector_db_ready:
                 raw_answer = result["answer"]
                 cleaned_answer = clean_html_tags(raw_answer)
                 
-                # Escape for HTML display and make JS safe
-                escaped_answer_text = html.escape(cleaned_answer)
-                js_safe_text = escaped_answer_text.replace("`", "\\`").replace("'", "\\'")
-
-                answer_html = f"""
+                # Display answer without copy functionality
+                st.markdown(f"""
                 <div class="answer-card">
-                    <button class="copy-btn" onclick="copyToClipboard(`{js_safe_text}`)">Copy</button>
-                    {escaped_answer_text}
+                    <div>{html.escape(cleaned_answer)}</div>
                 </div>
-                """
-                st.markdown(answer_html, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
 
                 sources = result.get("sources", "")
                 if sources and sources.strip():
