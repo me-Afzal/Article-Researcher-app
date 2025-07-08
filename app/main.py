@@ -1,5 +1,4 @@
 import streamlit as st
-import pickle
 import os
 import re
 from urllib.parse import unquote
@@ -225,6 +224,8 @@ def extract_and_clean_sources(sources_text):
 # Initialize session state
 if 'urls' not in st.session_state:
     st.session_state.urls = ['']
+if 'vector_db' not in st.session_state:
+    st.session_state.vector_db = None
 if 'vector_db_ready' not in st.session_state:
     st.session_state.vector_db_ready = False
 if 'processing' not in st.session_state:
@@ -232,8 +233,6 @@ if 'processing' not in st.session_state:
 
 # Adding API key for LLM call
 os.environ["TOGETHER_API_KEY"] = st.secrets["together"]["api_key"]
-
-file_path = "faiss_vector_db.pkl"
 
 # Initialize LLM
 llm = Together(
@@ -281,6 +280,8 @@ with col1:
 with col2:
     if st.button("Clear All", key="clear_all"):
         st.session_state.urls = ['']
+        st.session_state.vector_db = None
+        st.session_state.vector_db_ready = False
         st.rerun()
 
 valid_urls = [url.strip() for url in st.session_state.urls if url.strip()]
@@ -324,11 +325,11 @@ if process_clicked:
         embedder = HuggingFaceEmbeddings(model_name="all-mpnet-base-v2")
         vector_db = FAISS.from_documents(docs, embedding=embedder)
 
-        status_text.markdown('<div class="status-text">Saving vector database...</div>', unsafe_allow_html=True)
+        status_text.markdown('<div class="status-text">Storing vector database in session...</div>', unsafe_allow_html=True)
         progress_bar.progress(90)
 
-        with open(file_path, "wb") as f:
-            pickle.dump(vector_db, f)
+        # Store vector database in session state instead of pickle
+        st.session_state.vector_db = vector_db
 
         progress_bar.progress(100)
         st.session_state.vector_db_ready = True
@@ -339,7 +340,8 @@ if process_clicked:
         st.error(f"An error occurred during processing: {str(e)}")
         st.session_state.processing = False
 
-if os.path.exists(file_path):
+# Check if vector database is ready from session state
+if st.session_state.vector_db is not None:
     st.session_state.vector_db_ready = True
 
 if st.session_state.vector_db_ready:
@@ -356,8 +358,12 @@ if st.session_state.vector_db_ready:
     if search_clicked and query:
         with st.spinner("Searching for relevant information..."):
             try:
-                with open(file_path, "rb") as f:
-                    vector_db = pickle.load(f)
+                # Use vector database from session state
+                vector_db = st.session_state.vector_db
+                
+                if vector_db is None:
+                    st.error("Vector database not found. Please process URLs first.")
+                    st.stop()
 
                 retriever = vector_db.as_retriever(search_kwargs={"k": 3})
                 chain = RetrievalQAWithSourcesChain.from_llm(llm=llm, retriever=retriever)
