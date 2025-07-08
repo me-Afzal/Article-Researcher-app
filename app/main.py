@@ -183,6 +183,45 @@ def clean_and_decode_url(url):
     
     return url.strip()
 
+# NEW: Function to extract and clean sources
+def extract_and_clean_sources(sources_text):
+    """Extract individual sources from the sources text and remove duplicates"""
+    if not sources_text or sources_text.strip() == "":
+        return []
+    
+    # Split by various delimiters that might separate sources
+    potential_sources = re.split(r'[,\n\r\t;]', sources_text)
+    
+    valid_sources = []
+    seen_sources = set()
+    
+    for source in potential_sources:
+        source = source.strip()
+        
+        # Skip empty sources or common non-source indicators
+        if not source or source.lower() in ['n/a', 'none', 'null', '']:
+            continue
+            
+        # Clean and decode the source
+        cleaned_source = clean_and_decode_url(source)
+        
+        # Check if it's a valid URL
+        if cleaned_source.startswith(('http://', 'https://')):
+            # Normalize URL for duplicate checking (remove fragments and query params for comparison)
+            normalized_url = re.sub(r'[#?].*$', '', cleaned_source)
+            
+            # Only add if we haven't seen this URL before
+            if normalized_url not in seen_sources:
+                seen_sources.add(normalized_url)
+                valid_sources.append(cleaned_source)
+        else:
+            # For non-URL sources, check for duplicates differently
+            if cleaned_source not in seen_sources:
+                seen_sources.add(cleaned_source)
+                valid_sources.append(cleaned_source)
+    
+    return valid_sources
+
 # Initialize session state
 if 'urls' not in st.session_state:
     st.session_state.urls = ['']
@@ -200,7 +239,7 @@ file_path = "faiss_vector_db.pkl"
 llm = Together(
     model="mistralai/Mixtral-8x7B-Instruct-v0.1",
     temperature=0.6,
-    max_tokens=512
+    max_tokens=800
 )
 
 # Main header
@@ -337,32 +376,6 @@ if st.session_state.vector_db_ready:
                     <div>{html.escape(cleaned_answer)}</div>
                 </div>
                 """, unsafe_allow_html=True)
-
-                sources = result.get("sources", "")
-                if sources and sources.strip():
-                    st.markdown("### Sources")
-                    source_list = sources.split("\n")
-                    valid_sources = []
-                    
-                    for source in source_list:
-                        source = source.strip()
-                        if source and source != "N/A" and source != "":
-                            # Clean and decode the URL
-                            cleaned_source = clean_and_decode_url(source)
-                            valid_sources.append(cleaned_source)
-                    
-                    if valid_sources:
-                        for i, source in enumerate(valid_sources, 1):
-                            # Check if source is a URL
-                            if source.startswith(('http://', 'https://')):
-                                st.markdown(f'<div class="source-item">{i}. <a href="{source}" target="_blank">{source}</a></div>', unsafe_allow_html=True)
-                            else:
-                                # For non-URL sources, just display the text
-                                st.markdown(f'<div class="source-item">{i}. {source}</div>', unsafe_allow_html=True)
-                    else:
-                        st.markdown('<div class="source-item">No specific sources were identified for this answer.</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown('<div class="source-item">No sources available for this answer.</div>', unsafe_allow_html=True)
 
             except Exception as e:
                 st.error(f"An error occurred while processing your question: {str(e)}")
