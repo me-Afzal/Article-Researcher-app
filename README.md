@@ -53,10 +53,4 @@ Welcome to the **Articles Research Tool**, a Retrieval-Augmented Generation (RAG
 
 ---
 
-## 📦 Installation
 
-```bash
-git clone https://github.com/yourusername/articles-research-tool.git
-cd articles-research-tool
-pip install -r requirements.txt
-streamlit run app.py
