@@ -6,7 +6,5 @@ langchain_google_genai
 sentence-transformers
 faiss-cpu
 unstructured
-libmagic
-python-magic
-python-magic-bin
+python-magic  # keep only this
 tiktoken
