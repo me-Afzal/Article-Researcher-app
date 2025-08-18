@@ -1,0 +1,4 @@
+app/.streamlit/secrets.toml
+app/faiss_vector_db.pkl
+PPT/
+.git
