@@ -2,10 +2,10 @@ import streamlit as st
 import os
 import re
 from urllib.parse import unquote
-from langchain.chains import RetrievalQAWithSourcesChain
+from langchain.chains.qa_with_sources.retrieval import RetrievalQAWithSourcesChain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import UnstructuredURLLoader
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_google_genai import ChatGoogleGenerativeAI
 import html
@@ -22,19 +22,20 @@ st.set_page_config(
 st.markdown("""
 <style>
     .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        text-align: center;
-        color: #000;
-        margin-bottom: 2rem;
-        border-bottom: 2px solid #000;
-        padding-bottom: 1rem;
+    font-size: 2.5rem;
+    font-weight: bold;
+    text-align: center;
+    color: #ffffff !important;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    border-radius: 8px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
     }
 
     .sub-header {
         font-size: 1.3rem;
         font-weight: 600;
-        color: #000;
+        color: #ffffff !important;
         margin: 1.5rem 0 1rem 0;
         border-bottom: 1px solid #ddd;
         padding-bottom: 0.5rem;
