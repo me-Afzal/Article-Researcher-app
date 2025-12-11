@@ -236,7 +236,7 @@ if 'processing' not in st.session_state:
 os.environ["GOOGLE_API_KEY"] = st.secrets["api_key"]
 
 # Initialize LLM
-llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.7)
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.7)
 
 # Main header
 st.markdown('<h1 class="main-header">Articles Research Tool</h1>', unsafe_allow_html=True)
