@@ -4,7 +4,7 @@ Welcome to the **Articles Research Tool**, a Retrieval-Augmented Generation (RAG
 
 ## 🚀 Live Demo
 
-👉 Try it here: [https://article-researcher-app-cbngx5mmmxxdtjzfewngtn.streamlit.app](https://article-researcher-app-cbngx5mmmxxdtjzfewngtn.streamlit.app)
+## App Link: [Click Here](https://article-researcher-app-cbngx5mmmxxdtjzfewngtn.streamlit.app)
 
 ---
 
